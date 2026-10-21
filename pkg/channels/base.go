@@ -83,6 +83,7 @@ type MessageLengthProvider interface {
 }
 
 type BaseChannel struct {
+	inboundHandler      atomic.Pointer[inboundHandlerHolder]
 	config              any
 	bus                 *bus.MessageBus
 	running             atomic.Bool
@@ -94,6 +95,18 @@ type BaseChannel struct {
 	placeholderRecorder PlaceholderRecorder
 	owner               Channel // the concrete channel that embeds this BaseChannel
 	reasoningChannelID  string
+}
+
+// InboundHandler runs after sender authorization, before agent processing.
+type InboundHandler func(context.Context, bus.InboundMessage) error
+type inboundHandlerHolder struct{ handler InboundHandler }
+
+func (c *BaseChannel) SetInboundHandler(handler InboundHandler) {
+	if handler == nil {
+		c.inboundHandler.Store(nil)
+		return
+	}
+	c.inboundHandler.Store(&inboundHandlerHolder{handler: handler})
 }
 
 func NewBaseChannel(
@@ -311,6 +324,13 @@ func (c *BaseChannel) HandleMessageWithContext(
 		MediaScope: scope,
 	}
 	msg = bus.NormalizeInboundMessage(msg)
+	if h := c.inboundHandler.Load(); h != nil {
+		if err := h.handler(ctx, msg); err != nil {
+			logger.ErrorCF("channels", "Could not durably queue Paperless attachments", map[string]any{"error": err.Error()})
+			// Preserve normal conversation while making a staging failure visible.
+			msg.Content += "\n[Paperless: automatic archival could not be queued. Please report this failure; the attachment has not been saved.]"
+		}
+	}
 
 	// Auto-trigger typing indicator, message reaction, and placeholder before publishing.
 	// Each capability is independent — all three may fire for the same message.

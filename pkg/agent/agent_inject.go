@@ -7,8 +7,21 @@ import (
 	"github.com/sipeed/picoclaw/pkg/channels"
 	"github.com/sipeed/picoclaw/pkg/config"
 	"github.com/sipeed/picoclaw/pkg/media"
+	"github.com/sipeed/picoclaw/pkg/paperless"
 	"github.com/sipeed/picoclaw/pkg/tools"
 )
+
+func (al *AgentLoop) SetPaperless(s *paperless.Service) {
+	cfg := al.GetConfig()
+	registry := al.GetRegistry()
+	for _, id := range registry.ListAgentIDs() {
+		if a, ok := registry.GetAgent(id); ok {
+			for _, tool := range tools.NewPaperlessTools(s, a.Workspace, cfg.Agents.Defaults.RestrictToWorkspace, buildAllowReadPatterns(cfg)) {
+				a.Tools.Register(tool)
+			}
+		}
+	}
+}
 
 func (al *AgentLoop) RegisterTool(tool tools.Tool) {
 	registry := al.GetRegistry()

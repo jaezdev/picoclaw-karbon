@@ -1084,6 +1084,17 @@ type MediaCleanupConfig struct {
 	Interval   int `                                    json:"interval_minutes" env:"PICOCLAW_MEDIA_CLEANUP_INTERVAL"`
 }
 
+// PaperlessConfig controls native attachment archival and the save/status tools.
+// The API credential is read from TokenFile, never included in the model prompt.
+type PaperlessConfig struct {
+	Enabled     bool   `json:"enabled"`
+	AutoArchive bool   `json:"auto_archive"`
+	BaseURL     string `json:"base_url"`
+	PublicURL   string `json:"public_url"`
+	TokenFile   string `json:"token_file"`
+	QueueDir    string `json:"queue_dir"`
+}
+
 type ReadFileToolConfig struct {
 	Enabled         bool   `json:"enabled"`
 	Mode            string `json:"mode"`
@@ -1122,6 +1133,7 @@ type ToolsConfig struct {
 	Exec            ExecConfig         `json:"exec"              yaml:"-"`
 	Skills          SkillsToolsConfig  `json:"skills"            yaml:"skills,omitempty"`
 	MediaCleanup    MediaCleanupConfig `json:"media_cleanup"     yaml:"-"`
+	Paperless       PaperlessConfig    `json:"paperless" yaml:"-"`
 	MCP             MCPConfig          `json:"mcp"               yaml:"-"`
 	AppendFile      ToolConfig         `json:"append_file"       yaml:"-"                                                       envPrefix:"PICOCLAW_TOOLS_APPEND_FILE_"`
 	EditFile        ToolConfig         `json:"edit_file"         yaml:"-"                                                       envPrefix:"PICOCLAW_TOOLS_EDIT_FILE_"`

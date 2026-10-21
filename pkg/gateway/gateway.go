@@ -48,6 +48,7 @@ import (
 	"github.com/sipeed/picoclaw/pkg/logger"
 	"github.com/sipeed/picoclaw/pkg/media"
 	"github.com/sipeed/picoclaw/pkg/netbind"
+	"github.com/sipeed/picoclaw/pkg/paperless"
 	"github.com/sipeed/picoclaw/pkg/pid"
 	"github.com/sipeed/picoclaw/pkg/providers"
 	"github.com/sipeed/picoclaw/pkg/state"
@@ -65,6 +66,7 @@ const (
 )
 
 type services struct {
+	Paperless        *paperless.Service
 	CronService      *cron.CronService
 	HeartbeatService *heartbeat.HeartbeatService
 	MediaStore       media.MediaStore
@@ -75,6 +77,32 @@ type services struct {
 	manualReloadChan chan struct{}
 	reloading        atomic.Bool
 	authToken        string
+}
+
+func setupPaperless(cfg *config.Config, al *agent.AgentLoop, s *services) error {
+	if !cfg.Tools.Paperless.Enabled {
+		return nil
+	}
+	p, err := paperless.New(cfg.Tools.Paperless, s.MediaStore, func(ctx context.Context, msg bus.OutboundMessage) error {
+		if s.ChannelManager == nil {
+			return fmt.Errorf("channels not yet ready")
+		}
+		return s.ChannelManager.SendMessage(ctx, msg)
+	})
+	if err != nil {
+		return fmt.Errorf("initialize Paperless: %w", err)
+	}
+	s.Paperless = p
+	al.SetPaperless(p)
+	fmt.Println("✓ Paperless document archival initialized")
+	return nil
+}
+
+func paperlessHandler(s *services) channels.InboundHandler {
+	if s.Paperless == nil {
+		return nil
+	}
+	return s.Paperless.Capture
 }
 
 type startupBlockedProvider struct {
@@ -451,11 +479,16 @@ func setupAndStartServices(
 		fms.Start()
 	}
 
+	if err = setupPaperless(cfg, agentLoop, runningServices); err != nil {
+		return nil, err
+	}
+
 	runningServices.ChannelManager, err = channels.NewManager(
 		cfg,
 		msgBus,
 		runningServices.MediaStore,
 		channels.WithRuntimeEvents(agentLoop.RuntimeEventBus()),
+		channels.WithInboundHandler(paperlessHandler(runningServices)),
 	)
 	if err != nil {
 		if fms, ok := runningServices.MediaStore.(*media.FileMediaStore); ok {
@@ -497,6 +530,9 @@ func setupAndStartServices(
 		runningServices.HealthServer,
 	)
 
+	if runningServices.Paperless != nil {
+		runningServices.Paperless.Start()
+	}
 	if err = runningServices.ChannelManager.StartAll(context.Background()); err != nil {
 		return nil, fmt.Errorf("error starting channels: %w", err)
 	}
@@ -551,6 +587,13 @@ func stopAndCleanupServices(runningServices *services, shutdownTimeout time.Dura
 	}
 	if runningServices.CronService != nil {
 		runningServices.CronService.Stop()
+	}
+	if runningServices.Paperless != nil {
+		if runningServices.ChannelManager != nil {
+			runningServices.ChannelManager.SetInboundHandler(nil)
+		}
+		runningServices.Paperless.Stop()
+		runningServices.Paperless = nil
 	}
 	if runningServices.MediaStore != nil {
 		if fms, ok := runningServices.MediaStore.(*media.FileMediaStore); ok {
@@ -698,8 +741,14 @@ func restartServices(
 	if fms, ok := runningServices.MediaStore.(*media.FileMediaStore); ok {
 		fms.Start()
 	}
+	if err = setupPaperless(cfg, al, runningServices); err != nil {
+		return err
+	}
 	if runningServices.ChannelManager != nil {
 		runningServices.ChannelManager.SetMediaStore(runningServices.MediaStore)
+	}
+	if runningServices.ChannelManager != nil {
+		runningServices.ChannelManager.SetInboundHandler(paperlessHandler(runningServices))
 	}
 	al.SetMediaStore(runningServices.MediaStore)
 
@@ -707,6 +756,9 @@ func restartServices(
 
 	if err = runningServices.ChannelManager.Reload(context.Background(), cfg); err != nil {
 		return fmt.Errorf("error reload channels: %w", err)
+	}
+	if runningServices.Paperless != nil {
+		runningServices.Paperless.Start()
 	}
 	fmt.Println("  ✓ Channels restarted.")
 
