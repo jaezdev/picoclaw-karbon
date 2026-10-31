@@ -31,7 +31,8 @@ func (s *SessionConfig) ValidateSharedGroups() error {
 		}
 		ids[g.ID] = true
 		for _, m := range g.Members {
-			if m.Channel == "" || m.Account == "" || m.ChatType != "direct" || m.ChatID == "" || m.SenderID == "" || members[m] {
+			if m.Channel == "" || m.Account == "" || m.ChatType != "direct" || m.ChatID == "" || m.SenderID == "" ||
+				members[m] {
 				return fmt.Errorf("invalid or overlapping member in shared session group %q", g.ID)
 			}
 			for _, field := range []string{m.Channel, m.Account, m.ChatID, m.SenderID} {

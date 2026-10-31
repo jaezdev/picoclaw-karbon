@@ -207,13 +207,14 @@ func BuildSessionKey(scope SessionScope) string {
 	return BuildOpaqueSessionKey(CanonicalScopeSignature(scope))
 }
 
-// Shared keys have a distinct namespace and never resolve through legacy aliases.
+// BuildSharedSessionKey returns a key in a distinct namespace that never resolves through legacy aliases.
 func BuildSharedSessionKey(agentID, groupID string) string {
 	// Length-prefixed fields avoid delimiter ambiguity.
 	agentID = routing.NormalizeAgentID(agentID)
 	sum := sha256.Sum256([]byte(fmt.Sprintf("%d:%s:%s", len(agentID), agentID, groupID)))
 	return "sc_v1_" + hex.EncodeToString(sum[:])
 }
+
 func IsSharedSessionKey(key string) bool {
 	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(key)), "sc_v1_")
 }

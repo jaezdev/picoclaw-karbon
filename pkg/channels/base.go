@@ -98,8 +98,10 @@ type BaseChannel struct {
 }
 
 // InboundHandler runs after sender authorization, before agent processing.
-type InboundHandler func(context.Context, bus.InboundMessage) error
-type inboundHandlerHolder struct{ handler InboundHandler }
+type (
+	InboundHandler       func(context.Context, bus.InboundMessage) error
+	inboundHandlerHolder struct{ handler InboundHandler }
+)
 
 func (c *BaseChannel) SetInboundHandler(handler InboundHandler) {
 	if handler == nil {
@@ -326,7 +328,11 @@ func (c *BaseChannel) HandleMessageWithContext(
 	msg = bus.NormalizeInboundMessage(msg)
 	if h := c.inboundHandler.Load(); h != nil {
 		if err := h.handler(ctx, msg); err != nil {
-			logger.ErrorCF("channels", "Could not durably queue Paperless attachments", map[string]any{"error": err.Error()})
+			logger.ErrorCF(
+				"channels",
+				"Could not durably queue Paperless attachments",
+				map[string]any{"error": err.Error()},
+			)
 			// Preserve normal conversation while making a staging failure visible.
 			msg.Content += "\n[Paperless: automatic archival could not be queued. Please report this failure; the attachment has not been saved.]"
 		}

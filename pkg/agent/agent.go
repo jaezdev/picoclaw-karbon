@@ -540,7 +540,8 @@ func (al *AgentLoop) runAgentLoop(
 	opts processOptions,
 ) (string, error) {
 	// Shared history entrypoints must originate in an authorized, gated inbound turn.
-	if session.IsSharedSessionKey(opts.Dispatch.SessionKey) && ctx.Value(sharedTurnContextKey{}) != opts.Dispatch.SessionKey {
+	if session.IsSharedSessionKey(opts.Dispatch.SessionKey) &&
+		ctx.Value(sharedTurnContextKey{}) != opts.Dispatch.SessionKey {
 		return "", fmt.Errorf("shared sessions require authorized inbound dispatch")
 	}
 	opts = normalizeProcessOptions(opts)

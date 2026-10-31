@@ -83,12 +83,16 @@ func setupPaperless(cfg *config.Config, al *agent.AgentLoop, s *services) error 
 	if !cfg.Tools.Paperless.Enabled {
 		return nil
 	}
-	p, err := paperless.New(cfg.Tools.Paperless, s.MediaStore, func(ctx context.Context, msg bus.OutboundMessage) error {
-		if s.ChannelManager == nil {
-			return fmt.Errorf("channels not yet ready")
-		}
-		return s.ChannelManager.SendMessage(ctx, msg)
-	})
+	p, err := paperless.New(
+		cfg.Tools.Paperless,
+		s.MediaStore,
+		func(ctx context.Context, msg bus.OutboundMessage) error {
+			if s.ChannelManager == nil {
+				return fmt.Errorf("channels not yet ready")
+			}
+			return s.ChannelManager.SendMessage(ctx, msg)
+		},
+	)
 	if err != nil {
 		return fmt.Errorf("initialize Paperless: %w", err)
 	}

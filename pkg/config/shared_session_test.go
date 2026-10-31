@@ -6,7 +6,17 @@ import (
 )
 
 func TestSharedGroupsValidationAndRoundTrip(t *testing.T) {
-	good := SessionConfig{SharedGroups: []SharedSessionGroup{{ID: "owner", Members: []SharedSessionMember{{Channel: "telegram", Account: "default", ChatType: "direct", ChatID: "123", SenderID: "123"}, {Channel: "mqtt", Account: "default", ChatType: "direct", ChatID: "mqtt:job", SenderID: "job"}}}}}
+	good := SessionConfig{
+		SharedGroups: []SharedSessionGroup{
+			{
+				ID: "owner",
+				Members: []SharedSessionMember{
+					{Channel: "telegram", Account: "default", ChatType: "direct", ChatID: "123", SenderID: "123"},
+					{Channel: "mqtt", Account: "default", ChatType: "direct", ChatID: "mqtt:job", SenderID: "job"},
+				},
+			},
+		},
+	}
 	if err := good.ValidateSharedGroups(); err != nil {
 		t.Fatal(err)
 	}

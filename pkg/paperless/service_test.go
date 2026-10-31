@@ -21,15 +21,23 @@ func testConfig(t *testing.T, base string) config.PaperlessConfig {
 	t.Helper()
 	dir := t.TempDir()
 	token := filepath.Join(dir, "token")
-	if err := os.WriteFile(token, []byte("test-secret"), 0600); err != nil {
+	if err := os.WriteFile(token, []byte("test-secret"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	return config.PaperlessConfig{Enabled: true, AutoArchive: true, BaseURL: base, PublicURL: "https://paperless.example.com", TokenFile: token, QueueDir: filepath.Join(dir, "queue")}
+	return config.PaperlessConfig{
+		Enabled:     true,
+		AutoArchive: true,
+		BaseURL:     base,
+		PublicURL:   "https://paperless.example.com",
+		TokenFile:   token,
+		QueueDir:    filepath.Join(dir, "queue"),
+	}
 }
+
 func pdf(t *testing.T) string {
 	t.Helper()
 	p := filepath.Join(t.TempDir(), "invoice.pdf")
-	if err := os.WriteFile(p, []byte("%PDF-1.4\nsynthetic test document"), 0600); err != nil {
+	if err := os.WriteFile(p, []byte("%PDF-1.4\nsynthetic test document"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	return p
@@ -65,7 +73,10 @@ func TestCaptureSurvivesCleanupRestartAndRedelivery(t *testing.T) {
 			}
 			fmt.Fprint(w, `"upload-task"`)
 		} else {
-			fmt.Fprint(w, `{"results":[{"status":"success","related_document_ids":[42],"result_data":{"document_id":42}}]}`)
+			fmt.Fprint(
+				w,
+				`{"results":[{"status":"success","related_document_ids":[42],"result_data":{"document_id":42}}]}`,
+			)
 		}
 	}))
 	defer server.Close()
@@ -76,7 +87,10 @@ func TestCaptureSurvivesCleanupRestartAndRedelivery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	msg := bus.InboundMessage{Context: bus.InboundContext{Channel: "telegram", ChatID: "123", SenderID: "123", MessageID: "7"}, Media: []string{ref}}
+	msg := bus.InboundMessage{
+		Context: bus.InboundContext{Channel: "telegram", ChatID: "123", SenderID: "123", MessageID: "7"},
+		Media:   []string{ref},
+	}
 	notify := func(_ context.Context, m bus.OutboundMessage) error {
 		if rejectReceipt {
 			return fmt.Errorf("channel unavailable")
@@ -123,7 +137,7 @@ func TestCaptureSurvivesCleanupRestartAndRedelivery(t *testing.T) {
 	if receipts != 1 {
 		t.Fatalf("receipts: %d", receipts)
 	}
-	if err = os.WriteFile(source, []byte("%PDF-1.4\nsynthetic test document"), 0600); err != nil {
+	if err = os.WriteFile(source, []byte("%PDF-1.4\nsynthetic test document"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	ref, err = store.Store(source, media.MediaMeta{Filename: "invoice.pdf"}, "scope")
@@ -157,7 +171,10 @@ func TestServerFailureAuthFailureAndRetry(t *testing.T) {
 		if r.Method == "POST" {
 			fmt.Fprint(w, `"task"`)
 		} else {
-			fmt.Fprint(w, `{"results":[{"status":"failure","result_data":{"error":"duplicate document already exists"},"related_document_ids":[9]}]}`)
+			fmt.Fprint(
+				w,
+				`{"results":[{"status":"failure","result_data":{"error":"duplicate document already exists"},"related_document_ids":[9]}]}`,
+			)
 		}
 	}))
 	defer server.Close()
@@ -201,13 +218,20 @@ func TestServerFailureAuthFailureAndRetry(t *testing.T) {
 
 func TestInlineImageAndUnsupportedImage(t *testing.T) {
 	var text string
-	s, err := New(testConfig(t, "http://127.0.0.1"), nil, func(_ context.Context, m bus.OutboundMessage) error { text = m.Content; return nil })
+	s, err := New(
+		testConfig(t, "http://127.0.0.1"),
+		nil,
+		func(_ context.Context, m bus.OutboundMessage) error { text = m.Content; return nil },
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// A PNG signature is sufficient for content sniffing; OCR is tested separately against Paperless.
 	image := []byte{137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 0}
-	msg := bus.InboundMessage{Context: bus.InboundContext{Channel: "pico", ChatID: "chat", SenderID: "user", MessageID: "inline"}, Media: []string{"data:image/png;base64," + base64.StdEncoding.EncodeToString(image)}}
+	msg := bus.InboundMessage{
+		Context: bus.InboundContext{Channel: "pico", ChatID: "chat", SenderID: "user", MessageID: "inline"},
+		Media:   []string{"data:image/png;base64," + base64.StdEncoding.EncodeToString(image)},
+	}
 	if err = s.Capture(context.Background(), msg); err != nil {
 		t.Fatal(err)
 	}
@@ -215,7 +239,7 @@ func TestInlineImageAndUnsupportedImage(t *testing.T) {
 		t.Fatal("inline image not captured")
 	}
 	bad := filepath.Join(t.TempDir(), "broken.jpg")
-	_ = os.WriteFile(bad, []byte("not an image"), 0600)
+	_ = os.WriteFile(bad, []byte("not an image"), 0o600)
 	msg.Context.MessageID = "bad"
 	msg.Media = []string{bad}
 	if err = s.Capture(context.Background(), msg); err != nil {
@@ -231,7 +255,7 @@ func TestInlineImageAndUnsupportedImage(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if st.Mode().Perm() != 0700 {
+		if st.Mode().Perm() != 0o700 {
 			t.Fatal("queue permissions")
 		}
 	}

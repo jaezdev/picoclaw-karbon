@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"fmt"
+
 	"github.com/sipeed/picoclaw/pkg/bus"
 	"github.com/sipeed/picoclaw/pkg/logger"
 )
@@ -26,7 +27,13 @@ func (al *AgentLoop) enqueueSharedTurn(ctx context.Context, key string, msg bus.
 	case queue <- msg:
 	default:
 		al.sharedQueueMu.Unlock()
-		al.maybePublishError(ctx, msg.Channel, msg.ChatID, key, fmt.Errorf("shared conversation queue full; please retry"))
+		al.maybePublishError(
+			ctx,
+			msg.Channel,
+			msg.ChatID,
+			key,
+			fmt.Errorf("shared conversation queue full; please retry"),
+		)
 		return
 	}
 	al.sharedQueueMu.Unlock()

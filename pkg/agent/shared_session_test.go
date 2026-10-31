@@ -3,13 +3,14 @@ package agent
 import (
 	"context"
 	"fmt"
-	"github.com/sipeed/picoclaw/pkg/bus"
-	"github.com/sipeed/picoclaw/pkg/config"
-	"github.com/sipeed/picoclaw/pkg/session"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/sipeed/picoclaw/pkg/bus"
+	"github.com/sipeed/picoclaw/pkg/config"
+	"github.com/sipeed/picoclaw/pkg/session"
 )
 
 func TestSharedExplicitKeyCannotEnterEscapeOrAlias(t *testing.T) {
@@ -22,16 +23,52 @@ func TestSharedExplicitKeyCannotEnterEscapeOrAlias(t *testing.T) {
 		t.Fatalf("shared alias admitted: %v", a)
 	}
 }
+
 func TestSharedFullTurnsKeepOutboundDestinations(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Agents.Defaults.Workspace = t.TempDir()
 	cfg.Agents.Defaults.SummarizeMessageThreshold = 1000
-	cfg.Session.SharedGroups = []config.SharedSessionGroup{{ID: "owner", Members: []config.SharedSessionMember{{Channel: "telegram", Account: "default", ChatType: "direct", ChatID: "123", SenderID: "123"}, {Channel: "mqtt", Account: "default", ChatType: "direct", ChatID: "mqtt:job", SenderID: "job"}}}}
+	cfg.Session.SharedGroups = []config.SharedSessionGroup{
+		{
+			ID: "owner",
+			Members: []config.SharedSessionMember{
+				{Channel: "telegram", Account: "default", ChatType: "direct", ChatID: "123", SenderID: "123"},
+				{Channel: "mqtt", Account: "default", ChatType: "direct", ChatID: "mqtt:job", SenderID: "job"},
+			},
+		},
+	}
 	b := bus.NewMessageBus()
 	al := NewAgentLoop(cfg, b, &simpleMockProvider{response: "done"})
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	msgs := []bus.InboundMessage{{Channel: "telegram", ChatID: "123", SenderID: "123", Content: "telegram marker", Context: bus.InboundContext{Channel: "telegram", Account: "default", ChatType: "direct", ChatID: "123", SenderID: "123"}}, {Channel: "mqtt", ChatID: "mqtt:job", SenderID: "job", Content: "mqtt marker", Context: bus.InboundContext{Channel: "mqtt", Account: "default", ChatType: "direct", ChatID: "mqtt:job", SenderID: "job"}}}
+	msgs := []bus.InboundMessage{
+		{
+			Channel:  "telegram",
+			ChatID:   "123",
+			SenderID: "123",
+			Content:  "telegram marker",
+			Context: bus.InboundContext{
+				Channel:  "telegram",
+				Account:  "default",
+				ChatType: "direct",
+				ChatID:   "123",
+				SenderID: "123",
+			},
+		},
+		{
+			Channel:  "mqtt",
+			ChatID:   "mqtt:job",
+			SenderID: "job",
+			Content:  "mqtt marker",
+			Context: bus.InboundContext{
+				Channel:  "mqtt",
+				Account:  "default",
+				ChatType: "direct",
+				ChatID:   "mqtt:job",
+				SenderID: "job",
+			},
+		},
+	}
 	var wg sync.WaitGroup
 	for _, m := range msgs {
 		wg.Add(1)
@@ -83,7 +120,15 @@ func TestSharedRunQueueFIFOAndIndependentDestination(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Agents.Defaults.Workspace = t.TempDir()
 	cfg.Agents.Defaults.SummarizeMessageThreshold = 1000
-	cfg.Session.SharedGroups = []config.SharedSessionGroup{{ID: "owner", Members: []config.SharedSessionMember{{Channel: "telegram", Account: "default", ChatType: "direct", ChatID: "123", SenderID: "123"}, {Channel: "mqtt", Account: "default", ChatType: "direct", ChatID: "mqtt:job", SenderID: "job"}}}}
+	cfg.Session.SharedGroups = []config.SharedSessionGroup{
+		{
+			ID: "owner",
+			Members: []config.SharedSessionMember{
+				{Channel: "telegram", Account: "default", ChatType: "direct", ChatID: "123", SenderID: "123"},
+				{Channel: "mqtt", Account: "default", ChatType: "direct", ChatID: "mqtt:job", SenderID: "job"},
+			},
+		},
+	}
 	b := bus.NewMessageBus()
 	al := NewAgentLoop(cfg, b, &simpleMockProvider{response: "done"})
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
@@ -91,9 +136,21 @@ func TestSharedRunQueueFIFOAndIndependentDestination(t *testing.T) {
 	done := make(chan struct{})
 	go func() { defer close(done); al.Run(ctx) }()
 	for i := 0; i < 6; i++ {
-		c := bus.InboundContext{Channel: "telegram", Account: "default", ChatType: "direct", ChatID: "123", SenderID: "123"}
+		c := bus.InboundContext{
+			Channel:  "telegram",
+			Account:  "default",
+			ChatType: "direct",
+			ChatID:   "123",
+			SenderID: "123",
+		}
 		if i%2 == 1 {
-			c = bus.InboundContext{Channel: "mqtt", Account: "default", ChatType: "direct", ChatID: "mqtt:job", SenderID: "job"}
+			c = bus.InboundContext{
+				Channel:  "mqtt",
+				Account:  "default",
+				ChatType: "direct",
+				ChatID:   "mqtt:job",
+				SenderID: "job",
+			}
 		}
 		b.PublishInbound(ctx, bus.InboundMessage{Context: c, Content: fmt.Sprintf("marker-%d", i)})
 	}
@@ -143,7 +200,11 @@ func TestSharedDirectAndContinuationCannotImpersonateMember(t *testing.T) {
 	if h := al.registry.GetDefaultAgent().Sessions.GetHistory(key); len(h) != 1 {
 		t.Fatal("direct entered shared history")
 	}
-	if _, err := al.runAgentLoop(context.Background(), al.registry.GetDefaultAgent(), processOptions{Dispatch: DispatchRequest{SessionKey: key}}); err == nil {
+	if _, err := al.runAgentLoop(
+		context.Background(),
+		al.registry.GetDefaultAgent(),
+		processOptions{Dispatch: DispatchRequest{SessionKey: key}},
+	); err == nil {
 		t.Fatal("raw dispatch accepted")
 	}
 }

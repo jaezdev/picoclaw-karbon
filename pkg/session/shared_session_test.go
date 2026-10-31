@@ -2,22 +2,48 @@ package session
 
 import (
 	"context"
+	"sync"
+	"testing"
+	"time"
+
 	"github.com/sipeed/picoclaw/pkg/bus"
 	"github.com/sipeed/picoclaw/pkg/config"
 	"github.com/sipeed/picoclaw/pkg/providers"
 	"github.com/sipeed/picoclaw/pkg/routing"
-	"sync"
-	"testing"
-	"time"
 )
 
 func TestSharedExactMembershipAndAgentIsolation(t *testing.T) {
-	members := []config.SharedSessionMember{{Channel: "telegram", Account: "default", ChatType: "direct", ChatID: "123", SenderID: "123"}, {Channel: "mqtt", Account: "default", ChatType: "direct", ChatID: "mqtt:approved", SenderID: "approved"}}
-	policy := routing.SessionPolicy{Dimensions: []string{"chat"}, SharedGroups: []config.SharedSessionGroup{{ID: "owner", Members: members}}}
-	input := AllocationInput{AgentID: "main", SessionPolicy: policy, Context: bus.InboundContext{Channel: "telegram", Account: "default", ChatType: "direct", ChatID: "123", SenderID: "123"}}
+	members := []config.SharedSessionMember{
+		{Channel: "telegram", Account: "default", ChatType: "direct", ChatID: "123", SenderID: "123"},
+		{Channel: "mqtt", Account: "default", ChatType: "direct", ChatID: "mqtt:approved", SenderID: "approved"},
+	}
+	policy := routing.SessionPolicy{
+		Dimensions:   []string{"chat"},
+		SharedGroups: []config.SharedSessionGroup{{ID: "owner", Members: members}},
+	}
+	input := AllocationInput{
+		AgentID:       "main",
+		SessionPolicy: policy,
+		Context: bus.InboundContext{
+			Channel:  "telegram",
+			Account:  "default",
+			ChatType: "direct",
+			ChatID:   "123",
+			SenderID: "123",
+		},
+	}
 	first := AllocateRouteSession(input)
-	input.Context = bus.InboundContext{Channel: "mqtt", Account: "default", ChatType: "direct", ChatID: "mqtt:approved", SenderID: "approved"}
-	if second := AllocateRouteSession(input); first.SessionKey != second.SessionKey || len(second.SessionAliases) != 0 || len(second.MainAliases) != 0 {
+	input.Context = bus.InboundContext{
+		Channel:  "mqtt",
+		Account:  "default",
+		ChatType: "direct",
+		ChatID:   "mqtt:approved",
+		SenderID: "approved",
+	}
+	if second := AllocateRouteSession(
+		input,
+	); first.SessionKey != second.SessionKey || len(second.SessionAliases) != 0 ||
+		len(second.MainAliases) != 0 {
 		t.Fatal("members must share key without aliases")
 	}
 	input.AgentID = "other"
@@ -33,6 +59,7 @@ func TestSharedExactMembershipAndAgentIsolation(t *testing.T) {
 		}
 	}
 }
+
 func TestSharedTurnGateHistoryAndSummarySerialization(t *testing.T) {
 	var g TurnGate
 	var wg sync.WaitGroup

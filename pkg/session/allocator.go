@@ -32,7 +32,11 @@ type AllocationInput struct {
 // current opaque session-key format.
 func AllocateRouteSession(input AllocationInput) Allocation {
 	if group := matchSharedGroup(input); group != "" {
-		scope := SessionScope{Version: ScopeVersionV1, AgentID: routing.NormalizeAgentID(input.AgentID), SharedGroup: group}
+		scope := SessionScope{
+			Version:     ScopeVersionV1,
+			AgentID:     routing.NormalizeAgentID(input.AgentID),
+			SharedGroup: group,
+		}
 		// No legacy aliases, main aliases or automatic history promotion across this trust boundary.
 		key := BuildSharedSessionKey(scope.AgentID, group)
 		return Allocation{Scope: scope, SessionKey: key, MainSessionKey: key}
@@ -231,7 +235,10 @@ func matchSharedGroup(input AllocationInput) string {
 	}
 	for _, g := range cfg.SharedGroups {
 		for _, m := range g.Members {
-			if m.Channel == c.Channel && m.Account == routing.NormalizeAccountID(c.Account) && m.ChatType == c.ChatType && m.ChatID == c.ChatID && m.SenderID == c.SenderID {
+			if m.Channel == c.Channel && m.Account == routing.NormalizeAccountID(c.Account) &&
+				m.ChatType == c.ChatType &&
+				m.ChatID == c.ChatID &&
+				m.SenderID == c.SenderID {
 				return g.ID
 			}
 		}

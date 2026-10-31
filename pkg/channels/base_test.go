@@ -21,11 +21,23 @@ func TestInboundArchivalRunsOnlyAfterAuthorizationAndDoesNotDropChat(t *testing.
 		}
 		return errors.New("disk full")
 	})
-	c.HandleInboundContext(context.Background(), "chat", "hello", []string{"file"}, bus.InboundContext{SenderID: "denied", MessageID: "1"})
+	c.HandleInboundContext(
+		context.Background(),
+		"chat",
+		"hello",
+		[]string{"file"},
+		bus.InboundContext{SenderID: "denied", MessageID: "1"},
+	)
 	if calls != 0 {
 		t.Fatal("rejected sender reached archival")
 	}
-	c.HandleInboundContext(context.Background(), "chat", "hello", []string{"file"}, bus.InboundContext{SenderID: "allowed", MessageID: "2"})
+	c.HandleInboundContext(
+		context.Background(),
+		"chat",
+		"hello",
+		[]string{"file"},
+		bus.InboundContext{SenderID: "allowed", MessageID: "2"},
+	)
 	if calls != 1 {
 		t.Fatal("authorized attachment not captured")
 	}

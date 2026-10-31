@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/h2non/filetype"
+
 	"github.com/sipeed/picoclaw/pkg/bus"
 	"github.com/sipeed/picoclaw/pkg/config"
 	"github.com/sipeed/picoclaw/pkg/media"
@@ -74,32 +75,44 @@ type Service struct {
 func New(cfg config.PaperlessConfig, store media.MediaStore, notify Notify) (*Service, error) {
 	for _, raw := range []string{cfg.BaseURL, cfg.PublicURL} {
 		u, err := url.Parse(raw)
-		if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
-			return nil, errors.New("paperless requires valid HTTP(S) base_url and public_url without credentials, query, or fragment")
+		if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil ||
+			u.RawQuery != "" ||
+			u.Fragment != "" {
+			return nil, errors.New(
+				"paperless requires valid HTTP(S) base_url and public_url without credentials, query, or fragment",
+			)
 		}
 	}
 	if cfg.QueueDir == "" || cfg.TokenFile == "" {
 		return nil, errors.New("paperless requires queue_dir and token_file")
 	}
 	for _, dir := range []string{cfg.QueueDir, filepath.Join(cfg.QueueDir, "jobs"), filepath.Join(cfg.QueueDir, "batches"), filepath.Join(cfg.QueueDir, "blobs")} {
-		if err := os.MkdirAll(dir, 0700); err != nil {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return nil, err
 		}
-		if err := os.Chmod(dir, 0700); err != nil {
+		if err := os.Chmod(dir, 0o700); err != nil {
 			return nil, err
 		}
 	}
-	s := &Service{cfg: cfg, store: store, notify: notify, jobs: map[string]Job{}, batches: map[string]batch{}, done: make(chan struct{}), client: &http.Client{Timeout: 30 * time.Second, CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
-		return errors.New("Paperless redirects are not allowed")
-	}}}
+	s := &Service{
+		cfg:     cfg,
+		store:   store,
+		notify:  notify,
+		jobs:    map[string]Job{},
+		batches: map[string]batch{},
+		done:    make(chan struct{}),
+		client: &http.Client{Timeout: 30 * time.Second, CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return errors.New("Paperless redirects are not allowed")
+		}},
+	}
 	files, err := filepath.Glob(filepath.Join(cfg.QueueDir, "jobs", "*.json"))
 	if err != nil {
 		return nil, err
 	}
 	for _, p := range files {
 		var j Job
-		if err := readJSON(p, &j); err != nil {
-			return nil, fmt.Errorf("load Paperless queue: %w", err)
+		if loadErr := readJSON(p, &j); loadErr != nil {
+			return nil, fmt.Errorf("load Paperless queue: %w", loadErr)
 		}
 		if !validID(j.ID) {
 			return nil, errors.New("invalid Paperless queue job ID")
@@ -149,7 +162,7 @@ func atomicJSON(path string, value any) error {
 	}
 	name := f.Name()
 	defer os.Remove(name)
-	if e = f.Chmod(0600); e == nil {
+	if e = f.Chmod(0o600); e == nil {
 		_, e = f.Write(b)
 	}
 	if e == nil {
@@ -180,6 +193,7 @@ func (s *Service) saveJob(j Job) error {
 	s.jobs[j.ID] = j
 	return nil
 }
+
 func (s *Service) saveBatch(b batch) error {
 	if err := atomicJSON(filepath.Join(s.cfg.QueueDir, "batches", b.ID+".json"), b); err != nil {
 		return err
@@ -237,7 +251,8 @@ func (s *Service) enqueue(r io.Reader, name, title string) (Job, error) {
 	if err != nil {
 		return Job{}, err
 	}
-	if kind.MIME.Value != "application/pdf" && (!strings.HasPrefix(kind.MIME.Value, "image/") || kind.MIME.Value == "image/svg+xml") {
+	if kind.MIME.Value != "application/pdf" &&
+		(!strings.HasPrefix(kind.MIME.Value, "image/") || kind.MIME.Value == "image/svg+xml") {
 		return Job{}, ErrUnsupported
 	}
 	id := hex.EncodeToString(h.Sum(nil))
@@ -285,7 +300,8 @@ func (s *Service) Capture(ctx context.Context, msg bus.InboundMessage) error {
 		var err error
 		if strings.HasPrefix(ref, "data:") {
 			header, body, ok := strings.Cut(ref, ",")
-			if !ok || !strings.HasSuffix(header, ";base64") || (!strings.HasPrefix(header, "data:image/") && !strings.HasPrefix(header, "data:application/pdf;")) {
+			if !ok || !strings.HasSuffix(header, ";base64") ||
+				(!strings.HasPrefix(header, "data:image/") && !strings.HasPrefix(header, "data:application/pdf;")) {
 				continue
 			}
 			j, err = s.enqueue(base64.NewDecoder(base64.StdEncoding, strings.NewReader(body)), name, "")
@@ -322,7 +338,8 @@ func (s *Service) Capture(ctx context.Context, msg bus.InboundMessage) error {
 		}
 		if errors.Is(err, ErrUnsupported) {
 			ext := strings.ToLower(filepath.Ext(name))
-			if !strings.HasPrefix(ref, "data:image/") && !strings.Contains(".pdf .png .jpg .jpeg .gif .tif .tiff .webp .bmp .heic .svg", ext) {
+			if !strings.HasPrefix(ref, "data:image/") &&
+				!strings.Contains(".pdf .png .jpg .jpeg .gif .tif .tiff .webp .bmp .heic .svg", ext) {
 				continue
 			}
 			if ext == "" && !strings.HasPrefix(ref, "data:image/") {
@@ -339,12 +356,12 @@ func (s *Service) Capture(ctx context.Context, msg bus.InboundMessage) error {
 		return nil
 	}
 	key, _ := json.Marshal(struct {
-		Channel   string
-		Account   string
-		ChatID    string
-		SenderID  string
-		MessageID string
-		Items     []item
+		Channel   string `json:"Channel"`
+		Account   string `json:"Account"`
+		ChatID    string `json:"ChatID"`
+		SenderID  string `json:"SenderID"`
+		MessageID string `json:"MessageID"`
+		Items     []item `json:"Items"`
 	}{b.Context.Channel, b.Context.Account, b.Context.ChatID, b.Context.SenderID, b.Context.MessageID, b.Items})
 	h := sha256.Sum256(key)
 	b.ID = hex.EncodeToString(h[:])
@@ -432,6 +449,7 @@ func (s *Service) Start() {
 		}
 	}()
 }
+
 func (s *Service) Stop() {
 	if s.cancel != nil {
 		s.cancel()
@@ -522,7 +540,13 @@ type apiError struct {
 
 func (e *apiError) Error() string { return fmt.Sprintf("Paperless HTTP %d: %s", e.status, e.message) }
 
-func (s *Service) request(ctx context.Context, method, path string, body io.Reader, contentType string, contentLength ...int64) ([]byte, error) {
+func (s *Service) request(
+	ctx context.Context,
+	method, path string,
+	body io.Reader,
+	contentType string,
+	contentLength ...int64,
+) ([]byte, error) {
 	tokenBytes, err := os.ReadFile(s.cfg.TokenFile)
 	if err != nil {
 		return nil, errors.New("cannot read Paperless token file")
@@ -606,7 +630,14 @@ func (s *Service) upload(ctx context.Context, j Job) (string, error) {
 		}
 		w.CloseWithError(e)
 	}()
-	data, err := s.request(ctx, http.MethodPost, "/api/documents/post_document/", r, mw.FormDataContentType(), counter.n)
+	data, err := s.request(
+		ctx,
+		http.MethodPost,
+		"/api/documents/post_document/",
+		r,
+		mw.FormDataContentType(),
+		counter.n,
+	)
 	r.Close()
 	if err != nil {
 		return "", err
@@ -728,7 +759,16 @@ func (s *Service) receipts(ctx context.Context) {
 		if !complete && (b.PendingNotified || time.Since(b.Created) < 30*time.Second) {
 			continue
 		}
-		err := s.notify(ctx, bus.OutboundMessage{Channel: b.Context.Channel, ChatID: b.Context.ChatID, Context: b.Context, ReplyToMessageID: b.Context.MessageID, Content: strings.Join(lines, "\n")})
+		err := s.notify(
+			ctx,
+			bus.OutboundMessage{
+				Channel:          b.Context.Channel,
+				ChatID:           b.Context.ChatID,
+				Context:          b.Context,
+				ReplyToMessageID: b.Context.MessageID,
+				Content:          strings.Join(lines, "\n"),
+			},
+		)
 		if err == nil {
 			s.mu.Lock()
 			b.Notified = complete

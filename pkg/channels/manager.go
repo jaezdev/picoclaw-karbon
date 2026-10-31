@@ -128,7 +128,7 @@ func (m *Manager) SetInboundHandler(handler InboundHandler) {
 	defer m.mu.Unlock()
 	m.inboundHandler = handler
 	for _, ch := range m.channels {
-		if setter, ok := ch.(interface{ SetInboundHandler(InboundHandler) }); ok {
+		if setter, ok := ch.(interface{ SetInboundHandler(handler InboundHandler) }); ok {
 			setter.SetInboundHandler(handler)
 		}
 	}
@@ -1010,7 +1010,7 @@ func (m *Manager) initChannel(typeName, channelName string) {
 		})
 	} else {
 		// Inject MediaStore if channel supports it
-		if setter, ok := ch.(interface{ SetInboundHandler(InboundHandler) }); ok {
+		if setter, ok := ch.(interface{ SetInboundHandler(handler InboundHandler) }); ok {
 			setter.SetInboundHandler(m.inboundHandler)
 		}
 		if m.mediaStore != nil {

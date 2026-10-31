@@ -35,6 +35,7 @@ func TestTurnGateSerializationAndCleanup(t *testing.T) {
 		t.Fatal("idle entries leaked")
 	}
 }
+
 func TestTurnGateCancellationAndIndependentKeys(t *testing.T) {
 	var gate TurnGate
 	release, err := gate.Acquire(context.Background(), "a")
@@ -51,13 +52,13 @@ func TestTurnGateCancellationAndIndependentKeys(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := gate.Acquire(ctx, "c"); err == nil {
-		t.Fatal("pre-cancelled context acquired gate")
+		t.Fatal("pre-canceled context acquired gate")
 	}
 	other()
 	release()
 	gate.mu.Lock()
 	defer gate.mu.Unlock()
 	if len(gate.entries) != 0 {
-		t.Fatal("cancelled entry leaked")
+		t.Fatal("canceled entry leaked")
 	}
 }

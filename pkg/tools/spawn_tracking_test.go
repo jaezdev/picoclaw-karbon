@@ -42,15 +42,20 @@ func TestSpawnTool_StatusLifecycle(t *testing.T) {
 			tool.SetSpawner(spawner)
 			ctx := WithToolContext(context.Background(), "telegram", "chat-a")
 			delivered := make(chan string, 1)
-			ack := tool.ExecuteAsync(ctx, map[string]any{"task": "test", "label": "tracked", "agent_id": "worker"}, func(_ context.Context, _ *ToolResult) {
-				snapshot, _ := manager.GetTaskCopy("subagent-1")
-				delivered <- snapshot.Status
-			})
+			ack := tool.ExecuteAsync(
+				ctx,
+				map[string]any{"task": "test", "label": "tracked", "agent_id": "worker"},
+				func(_ context.Context, _ *ToolResult) {
+					snapshot, _ := manager.GetTaskCopy("subagent-1")
+					delivered <- snapshot.Status
+				},
+			)
 			if !ack.Async || !strings.Contains(ack.ForLLM, "subagent-1") {
 				t.Fatalf("missing task ID: %+v", ack)
 			}
 			snapshot, ok := manager.GetTaskCopy("subagent-1")
-			if !ok || snapshot.Status != "running" || snapshot.AgentID != "worker" || snapshot.Label != "tracked" || snapshot.OriginChatID != "chat-a" {
+			if !ok || snapshot.Status != "running" || snapshot.AgentID != "worker" || snapshot.Label != "tracked" ||
+				snapshot.OriginChatID != "chat-a" {
 				t.Fatalf("bad initial task: %+v", snapshot)
 			}
 			if got := status.Execute(ctx, map[string]any{}).ForLLM; !strings.Contains(got, "status=running") {
@@ -96,7 +101,11 @@ func TestSpawnTool_ConcurrentTracking(t *testing.T) {
 	done := make(chan struct{}, 20)
 	for i := 0; i < 20; i++ {
 		go func() {
-			tool.ExecuteAsync(ctx, map[string]any{"task": "test"}, func(context.Context, *ToolResult) { done <- struct{}{} })
+			tool.ExecuteAsync(
+				ctx,
+				map[string]any{"task": "test"},
+				func(context.Context, *ToolResult) { done <- struct{}{} },
+			)
 		}()
 	}
 	close(release)
