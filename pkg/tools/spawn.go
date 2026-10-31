@@ -2,11 +2,14 @@ package tools
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
+	"time"
 )
 
 type SpawnTool struct {
+	manager        *SubagentManager
 	spawner        SubTurnSpawner
 	defaultModel   string
 	maxTokens      int
@@ -22,6 +25,7 @@ func NewSpawnTool(manager *SubagentManager) *SpawnTool {
 		return &SpawnTool{}
 	}
 	return &SpawnTool{
+		manager:      manager,
 		defaultModel: manager.defaultModel,
 		maxTokens:    manager.maxTokens,
 		temperature:  manager.temperature,
@@ -127,6 +131,20 @@ Task: %s`,
 
 	// Use spawner if available (direct SpawnSubTurn call)
 	if t.spawner != nil {
+		// Register before launching so an immediate status query sees the task.
+		var tracked *SubagentTask
+		if t.manager != nil {
+			t.manager.mu.Lock()
+			tracked = &SubagentTask{
+				ID:   fmt.Sprintf("subagent-%d", t.manager.nextID),
+				Task: task, Label: label, AgentID: targetAgentID,
+				OriginChannel: ToolChannel(ctx), OriginChatID: ToolChatID(ctx),
+				Status: "running", Created: time.Now().UnixMilli(),
+			}
+			t.manager.nextID++
+			t.manager.tasks[tracked.ID] = tracked
+			t.manager.mu.Unlock()
+		}
 		// Launch async sub-turn in goroutine
 		go func() {
 			result, err := t.spawner.SpawnSubTurn(ctx, SubTurnConfig{
@@ -143,12 +161,34 @@ Task: %s`,
 				result = ErrorResult(fmt.Sprintf("Spawn failed: %v", err)).WithError(err)
 			}
 
+			if result == nil {
+				err = fmt.Errorf("Spawn returned no result")
+				result = ErrorResult(err.Error()).WithError(err)
+			}
+			if tracked != nil {
+				t.manager.mu.Lock()
+				tracked.Status = "completed"
+				if err != nil || result.IsError {
+					tracked.Status = "failed"
+					if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) ||
+						errors.Is(result.Err, context.Canceled) || errors.Is(result.Err, context.DeadlineExceeded) {
+						tracked.Status = "canceled"
+					}
+				}
+				tracked.Result = result.ContentForLLM()
+				t.manager.mu.Unlock()
+			}
+
 			// Call callback if provided
 			if cb != nil {
 				cb(ctx, result)
 			}
 		}()
 
+		// Include the stable task ID for subsequent status queries.
+		if tracked != nil {
+			return AsyncResult(fmt.Sprintf("Spawned subagent [%s] '%s' for task: %s", tracked.ID, label, task))
+		}
 		// Return immediate acknowledgment
 		if label != "" {
 			return AsyncResult(fmt.Sprintf("Spawned subagent '%s' for task: %s", label, task))
