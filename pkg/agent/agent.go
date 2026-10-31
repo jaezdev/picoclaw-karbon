@@ -66,6 +66,9 @@ type AgentLoop struct {
 	workerSem chan struct{}
 
 	// activeTurnStates tracks active turns per session to prevent duplicates.
+	sharedTurns      session.TurnGate
+	sharedQueueMu    sync.Mutex
+	sharedQueues     map[string]chan bus.InboundMessage
 	activeTurnStates sync.Map
 	subTurnCounter   atomic.Int64
 
@@ -175,6 +178,12 @@ func (al *AgentLoop) Run(ctx context.Context) error {
 				// Note: system messages are processed in the main goroutine,
 				// so they block the receive loop but guarantee session serialization.
 				al.processMessageSync(ctx, msg)
+				continue
+			}
+
+			// Queue whole messages, never lossy cross-transport steering.
+			if session.IsSharedSessionKey(sessionKey) {
+				al.enqueueSharedTurn(ctx, sessionKey, msg)
 				continue
 			}
 
@@ -530,6 +539,10 @@ func (al *AgentLoop) runAgentLoop(
 	agent *AgentInstance,
 	opts processOptions,
 ) (string, error) {
+	// Shared history entrypoints must originate in an authorized, gated inbound turn.
+	if session.IsSharedSessionKey(opts.Dispatch.SessionKey) && ctx.Value(sharedTurnContextKey{}) != opts.Dispatch.SessionKey {
+		return "", fmt.Errorf("shared sessions require authorized inbound dispatch")
+	}
 	opts = normalizeProcessOptions(opts)
 	var err error
 	opts, err = resolveTurnProfileOptions(al.GetConfig(), opts)

@@ -253,3 +253,11 @@ The session system is consumed by more than the agent loop:
 - `pkg/agent/instance.go`
 - `pkg/agent/agent.go`
 - `pkg/agent/agent_message.go`
+
+## Explicit shared transport groups
+
+Optional `SessionConfig.SharedGroups` is cloned into route/turn policy snapshots. The allocator validates groups and matches the complete direct-message channel/account/chat/sender identity; topics and spaces are excluded. A match emits a scope with `SharedGroup` and `AgentID`, a deterministic `sc_v1_` key, and no legacy aliases. Normal allocations remain unchanged.
+
+The agent strips shared keys from ordinary aliases and prevents explicit-key overrides across the shared boundary. The JSONL adapter also rejects aliases into or out of the shared namespace. A shared group does not automatically migrate or promote any transport history.
+
+Shared inbound messages bypass lossy text-only steering: a bounded FIFO preserves complete messages and original destinations. `session.TurnGate` serializes full shared read/modify/write turns through publication, and asynchronous summarization obtains the same gate. Direct key-only continuations cannot impersonate members. These locks are process-local, not a multi-process storage lock.

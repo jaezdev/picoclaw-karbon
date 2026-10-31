@@ -157,6 +157,17 @@ func (al *AgentLoop) processMessage(ctx context.Context, msg bus.InboundMessage)
 	// agent-scoped keys supplied by the caller.
 	scopeKey := resolveScopeKey(allocation.SessionKey, msg.SessionKey)
 	sessionKey := scopeKey
+	var aliases []string
+	if allocation.Scope.SharedGroup != "" && ctx.Value(sharedTurnContextKey{}) != sessionKey {
+		release, err := al.sharedTurns.Acquire(ctx, sessionKey)
+		if err != nil {
+			return "", err
+		}
+		defer release()
+		ctx = context.WithValue(ctx, sharedTurnContextKey{}, sessionKey)
+	} else if allocation.Scope.SharedGroup == "" {
+		aliases = buildSessionAliases(sessionKey, append(allocation.SessionAliases, msg.SessionKey)...)
+	}
 
 	// Reset message-tool state for this round so we don't skip publishing due to a previous round.
 	if tool, ok := agent.Tools.Get("message"); ok {
@@ -179,7 +190,7 @@ func (al *AgentLoop) processMessage(ctx context.Context, msg bus.InboundMessage)
 	opts := processOptions{
 		Dispatch: DispatchRequest{
 			SessionKey:     sessionKey,
-			SessionAliases: buildSessionAliases(sessionKey, append(allocation.SessionAliases, msg.SessionKey)...),
+			SessionAliases: aliases,
 			InboundContext: cloneInboundContext(&msg.Context),
 			RouteResult:    cloneResolvedRoute(&route),
 			SessionScope:   session.CloneScope(&allocation.Scope),

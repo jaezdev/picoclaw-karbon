@@ -258,7 +258,7 @@ func (c *Config) MarshalJSON() ([]byte, error) {
 		Alias: (*Alias)(c),
 	}
 
-	if len(c.Session.Dimensions) > 0 || len(c.Session.IdentityLinks) > 0 || c.Session.DmScope != "" {
+	if len(c.Session.Dimensions) > 0 || len(c.Session.IdentityLinks) > 0 || c.Session.DmScope != "" || len(c.Session.SharedGroups) > 0 {
 		sessionCfg := c.Session
 		aux.Session = &sessionCfg
 	}
@@ -348,9 +348,10 @@ type DispatchSelector struct {
 }
 
 type SessionConfig struct {
-	Dimensions    []string            `json:"dimensions,omitempty"`
-	IdentityLinks map[string][]string `json:"identity_links,omitempty"`
-	DmScope       string              `json:"dm_scope,omitempty"`
+	SharedGroups  []SharedSessionGroup `json:"shared_groups,omitempty"`
+	Dimensions    []string             `json:"dimensions,omitempty"`
+	IdentityLinks map[string][]string  `json:"identity_links,omitempty"`
+	DmScope       string               `json:"dm_scope,omitempty"`
 }
 
 // ApplyDmScope translates the user-facing dm_scope value into the internal
@@ -1557,6 +1558,9 @@ func LoadConfig(path string) (*Config, error) {
 		cfg.Agents.Defaults.Workspace = filepath.Join(homePath, pkg.WorkspaceName)
 	}
 
+	if err := cfg.Session.ValidateSharedGroups(); err != nil {
+		return nil, err
+	}
 	cfg.Session.ApplyDmScope()
 	cfg.Session.DeriveDmScope()
 
@@ -1682,6 +1686,9 @@ func toNameIndex(list []*ModelConfig) []string {
 }
 
 func SaveConfig(path string, cfg *Config) error {
+	if err := cfg.Session.ValidateSharedGroups(); err != nil {
+		return err
+	}
 	if cfg.Version < CurrentVersion {
 		cfg.Version = CurrentVersion
 	}

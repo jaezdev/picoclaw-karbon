@@ -42,7 +42,7 @@ func IsLegacyAgentSessionKey(key string) bool {
 }
 
 func IsExplicitSessionKey(key string) bool {
-	return IsOpaqueSessionKey(key) || IsLegacyAgentSessionKey(key)
+	return IsSharedSessionKey(key) || IsOpaqueSessionKey(key) || IsLegacyAgentSessionKey(key)
 }
 
 func ParseLegacyAgentSessionKey(sessionKey string) *ParsedLegacySessionKey {
@@ -201,5 +201,19 @@ func CanonicalScopeSignature(scope SessionScope) string {
 
 // BuildSessionKey returns the current opaque key for a structured session scope.
 func BuildSessionKey(scope SessionScope) string {
+	if scope.SharedGroup != "" {
+		return BuildSharedSessionKey(scope.AgentID, scope.SharedGroup)
+	}
 	return BuildOpaqueSessionKey(CanonicalScopeSignature(scope))
+}
+
+// Shared keys have a distinct namespace and never resolve through legacy aliases.
+func BuildSharedSessionKey(agentID, groupID string) string {
+	// Length-prefixed fields avoid delimiter ambiguity.
+	agentID = routing.NormalizeAgentID(agentID)
+	sum := sha256.Sum256([]byte(fmt.Sprintf("%d:%s:%s", len(agentID), agentID, groupID)))
+	return "sc_v1_" + hex.EncodeToString(sum[:])
+}
+func IsSharedSessionKey(key string) bool {
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(key)), "sc_v1_")
 }

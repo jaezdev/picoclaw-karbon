@@ -321,3 +321,25 @@ func TestJSONLBackend_EnsureSessionMetadata_DoesNotOverwriteNonEmptyCanonicalHis
 		t.Fatalf("canonical history overwritten: %+v", history)
 	}
 }
+
+func TestSharedKeysNeverBecomeAliasesOrPromotePrivateHistory(t *testing.T) {
+	b := newBackend(t)
+	shared := session.BuildSharedSessionKey("main", "owner")
+	normal := session.BuildOpaqueSessionKey("outsider")
+	b.AddMessage(shared, "user", "private shared marker")
+	b.EnsureSessionMetadata(normal, nil, []string{shared})
+	if h := b.GetHistory(normal); len(h) != 0 {
+		t.Fatal("outsider promoted shared history")
+	}
+	if b.ResolveSessionKey(shared) != shared {
+		t.Fatal("shared key relabeled")
+	}
+	b.AddMessage(normal, "user", "outsider")
+	if h := b.GetHistory(shared); len(h) != 1 || h[0].Content != "private shared marker" {
+		t.Fatal("shared history mutated")
+	}
+	b.EnsureSessionMetadata(shared, nil, []string{normal})
+	if b.ResolveSessionKey(normal) != normal {
+		t.Fatal("outsider aliased into shared history")
+	}
+}

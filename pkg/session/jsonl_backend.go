@@ -40,6 +40,9 @@ func NewJSONLBackend(store memory.Store) *JSONLBackend {
 }
 
 func (b *JSONLBackend) resolveSessionKey(sessionKey string) string {
+	if IsSharedSessionKey(sessionKey) {
+		return sessionKey
+	}
 	metaStore, ok := b.store.(metaAwareStore)
 	if !ok {
 		return sessionKey
@@ -49,7 +52,7 @@ func (b *JSONLBackend) resolveSessionKey(sessionKey string) string {
 		log.Printf("session: resolve session key: %v", err)
 		return sessionKey
 	}
-	if found && resolved != "" {
+	if found && resolved != "" && !IsSharedSessionKey(resolved) {
 		return resolved
 	}
 	return sessionKey
@@ -73,6 +76,18 @@ func (b *JSONLBackend) EnsureSessionMetadata(sessionKey string, scope *SessionSc
 		return
 	}
 
+	// Shared keys cannot be aliases or promote transport history implicitly.
+	if IsSharedSessionKey(sessionKey) {
+		aliases = nil
+	} else {
+		clean := make([]string, 0, len(aliases))
+		for _, alias := range aliases {
+			if !IsSharedSessionKey(alias) {
+				clean = append(clean, alias)
+			}
+		}
+		aliases = clean
+	}
 	var rawScope json.RawMessage
 	if scope != nil {
 		data, err := json.Marshal(scope)

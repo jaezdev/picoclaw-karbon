@@ -271,3 +271,27 @@ PicoClaw keeps compatibility with older `agent:...` session keys while moving ru
 - [Configuration Guide](configuration.md)
 - [Routing Guide](routing-guide.md)
 - [Providers & Model Configuration](providers.md)
+
+## Opt-in cross-channel shared conversations
+
+`session.shared_groups` explicitly joins exact direct-message transport identities into one history. With no groups configured, existing session behavior is unchanged.
+
+```json
+{
+  "session": {
+    "shared_groups": [{
+      "id": "owner",
+      "members": [
+        {"channel": "telegram", "account": "default", "chat_type": "direct", "chat_id": "123", "sender_id": "123"},
+        {"channel": "mqtt", "account": "default", "chat_type": "direct", "chat_id": "mqtt:job", "sender_id": "job"}
+      ]
+    }]
+  }
+}
+```
+
+Replace these example identities with values verified from authorized inbound messages. Every field is required. Channel/account must be lowercase; chat/sender IDs match exactly. A group needs at least two members. Wildcards, overlapping members, internal channels, group chats and topic/space messages are excluded. Existing channel sender authorization still applies: membership is not an authentication mechanism. `identity_links` does not expand shared membership. Enumerate automation sessions individually rather than granting a wildcard.
+
+Each group has a separate history per routed agent. Full turns are serialized and replies retain their originating channel/chat. The per-session pending queue is limited to 64 messages; overflow asks the caller to retry. Shared history uses a distinct `sc_v1_` namespace and never imports old chat history or legacy aliases automatically. Explicit incoming session keys cannot enter or escape a shared group. Existing private histories are preserved; enabling a group starts separate shared history. Disabling it returns future messages to their ordinary sessions, without merging the histories.
+
+Only complete authorized inbound messages may enter shared history. Key-only steering continuations are rejected for shared keys. The turn gate is process-local: do not run multiple gateway writers against the same session directory.
