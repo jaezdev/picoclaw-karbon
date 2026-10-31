@@ -2,6 +2,7 @@ package agent
 
 import (
 	"github.com/sipeed/picoclaw/pkg/bus"
+	"github.com/sipeed/picoclaw/pkg/config"
 	"github.com/sipeed/picoclaw/pkg/routing"
 	"github.com/sipeed/picoclaw/pkg/session"
 )
@@ -74,6 +75,7 @@ func cloneResolvedRoute(route *routing.ResolvedRoute) *routing.ResolvedRoute {
 	cloned.SessionPolicy = routing.SessionPolicy{
 		Dimensions:    append([]string(nil), route.SessionPolicy.Dimensions...),
 		IdentityLinks: cloneIdentityLinks(route.SessionPolicy.IdentityLinks),
+		SharedGroups:  config.CloneSharedSessionGroups(route.SessionPolicy.SharedGroups),
 	}
 	return &cloned
 }

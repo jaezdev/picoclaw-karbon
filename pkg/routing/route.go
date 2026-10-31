@@ -12,6 +12,7 @@ import (
 type SessionPolicy struct {
 	Dimensions    []string
 	IdentityLinks map[string][]string
+	SharedGroups  []config.SharedSessionGroup
 }
 
 // ResolvedRoute is the result of agent routing.
@@ -106,6 +107,7 @@ func (r *RouteResolver) sessionPolicy(rule *config.DispatchRule) SessionPolicy {
 	return SessionPolicy{
 		Dimensions:    normalizeSessionDimensions(dimensions),
 		IdentityLinks: cloneIdentityLinks(r.cfg.Session.IdentityLinks),
+		SharedGroups:  config.CloneSharedSessionGroups(r.cfg.Session.SharedGroups),
 	}
 }
 

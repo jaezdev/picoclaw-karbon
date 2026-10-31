@@ -369,6 +369,9 @@ func (al *AgentLoop) agentForSession(sessionKey string) *AgentInstance {
 //
 // If no steering messages are pending, it returns an empty string.
 func (al *AgentLoop) Continue(ctx context.Context, sessionKey, channel, chatID string) (string, error) {
+	if session.IsSharedSessionKey(sessionKey) {
+		return "", fmt.Errorf("shared sessions require a complete inbound message, not steering continuation")
+	}
 	// Claim the session with a unique placeholder to prevent a TOCTOU race where two
 	// concurrent Continue calls for the same session both pass the active-turn
 	// check and create parallel turns. The placeholder is replaced by the real

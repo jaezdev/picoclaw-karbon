@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/sipeed/picoclaw/pkg/bus"
+	"github.com/sipeed/picoclaw/pkg/config"
 	"github.com/sipeed/picoclaw/pkg/routing"
 )
 
@@ -30,6 +31,16 @@ type AllocationInput struct {
 // AllocateRouteSession maps a route decision onto a structured scope and the
 // current opaque session-key format.
 func AllocateRouteSession(input AllocationInput) Allocation {
+	if group := matchSharedGroup(input); group != "" {
+		scope := SessionScope{
+			Version:     ScopeVersionV1,
+			AgentID:     routing.NormalizeAgentID(input.AgentID),
+			SharedGroup: group,
+		}
+		// No legacy aliases, main aliases or automatic history promotion across this trust boundary.
+		key := BuildSharedSessionKey(scope.AgentID, group)
+		return Allocation{Scope: scope, SessionKey: key, MainSessionKey: key}
+	}
 	scope := buildSessionScope(input)
 	legacySessionAliases := buildLegacySessionAliases(input)
 	legacyMainSessionKey := strings.ToLower(BuildLegacyMainAlias(input.AgentID))
@@ -210,4 +221,27 @@ func uniqueAliases(aliases []string) []string {
 		return nil
 	}
 	return normalized
+}
+
+// matchSharedGroup fails closed even for programmatically constructed invalid configs.
+func matchSharedGroup(input AllocationInput) string {
+	cfg := config.SessionConfig{SharedGroups: input.SessionPolicy.SharedGroups}
+	if cfg.ValidateSharedGroups() != nil {
+		return ""
+	}
+	c := input.Context
+	if c.TopicID != "" || c.SpaceID != "" {
+		return ""
+	}
+	for _, g := range cfg.SharedGroups {
+		for _, m := range g.Members {
+			if m.Channel == c.Channel && m.Account == routing.NormalizeAccountID(c.Account) &&
+				m.ChatType == c.ChatType &&
+				m.ChatID == c.ChatID &&
+				m.SenderID == c.SenderID {
+				return g.ID
+			}
+		}
+	}
+	return ""
 }

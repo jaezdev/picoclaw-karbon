@@ -146,7 +146,6 @@ func (cb *ContextBuilder) promptRegistryOrDefault() *PromptRegistry {
 
 func (cb *ContextBuilder) getIdentity(includeToolUseRule bool) string {
 	workspacePath, _ := filepath.Abs(filepath.Join(cb.workspace))
-	version := config.FormatVersion()
 	rules := []string{}
 	if includeToolUseRule {
 		rules = append(rules, toolUseSystemPromptRule())
@@ -174,9 +173,9 @@ func (cb *ContextBuilder) getIdentity(includeToolUseRule bool) string {
 	}
 
 	return fmt.Sprintf(
-		`# picoclaw 🦞 (%s)
+		`# Assistant
 
-You are picoclaw, a helpful AI assistant.
+Use the identity and personality defined in the workspace instructions.
 
 ## Workspace
 Your workspace is at: %s
@@ -188,7 +187,6 @@ Your workspace is at: %s
 
 %s
 `,
-		version,
 		workspacePath,
 		workspacePath,
 		workspacePath,
@@ -254,7 +252,7 @@ func (cb *ContextBuilder) buildSystemPromptParts(opts systemPromptBuildOptions) 
 		Layer:   PromptLayerKernel,
 		Slot:    PromptSlotIdentity,
 		Source:  PromptSource{ID: PromptSourceKernel, Name: "identity"},
-		Title:   "picoclaw identity",
+		Title:   "assistant identity",
 		Content: cb.getIdentity(opts.IncludeToolUseRule),
 		Stable:  true,
 		Cache:   PromptCacheEphemeral,

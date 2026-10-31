@@ -362,6 +362,10 @@ func normalizedInboundContext(msg bus.InboundMessage) bus.InboundContext {
 }
 
 func resolveScopeKey(routeSessionKey, msgSessionKey string) string {
+	// Transport callers cannot use explicit keys to enter or escape a shared group.
+	if session.IsSharedSessionKey(routeSessionKey) || session.IsSharedSessionKey(msgSessionKey) {
+		return routeSessionKey
+	}
 	if isExplicitSessionKey(msgSessionKey) {
 		return msgSessionKey
 	}
@@ -381,7 +385,7 @@ func buildSessionAliases(canonicalKey string, keys ...string) []string {
 	canonicalKey = strings.TrimSpace(canonicalKey)
 	for _, key := range keys {
 		key = strings.TrimSpace(key)
-		if key == "" || key == canonicalKey {
+		if key == "" || key == canonicalKey || session.IsSharedSessionKey(key) {
 			continue
 		}
 		if _, ok := seen[key]; ok {

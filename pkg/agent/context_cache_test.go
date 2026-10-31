@@ -37,7 +37,7 @@ func setupWorkspace(t *testing.T, files map[string]string) string {
 // Codex (only reads last system message as instructions).
 func TestSingleSystemMessage(t *testing.T) {
 	tmpDir := setupWorkspace(t, map[string]string{
-		"AGENT.md": "# Agent\nTest agent.",
+		"AGENT.md": "# Agent\nYou are karb0n.",
 	})
 	defer os.RemoveAll(tmpDir)
 
@@ -102,8 +102,11 @@ func TestSingleSystemMessage(t *testing.T) {
 
 			// System message must contain identity (static) and time (dynamic)
 			sys := msgs[0].Content
-			if !strings.Contains(sys, "picoclaw") {
-				t.Error("system message missing identity")
+			if !strings.Contains(sys, "You are karb0n.") {
+				t.Error("system message missing workspace identity")
+			}
+			if strings.Contains(sys, "You are picoclaw") || strings.Contains(sys, "🦞") {
+				t.Error("system message overrides workspace identity with built-in branding")
 			}
 			if !strings.Contains(sys, "Current Time") {
 				t.Error("system message missing dynamic time context")

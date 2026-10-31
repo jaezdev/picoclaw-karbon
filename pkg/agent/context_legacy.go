@@ -10,6 +10,7 @@ import (
 	runtimeevents "github.com/sipeed/picoclaw/pkg/events"
 	"github.com/sipeed/picoclaw/pkg/logger"
 	"github.com/sipeed/picoclaw/pkg/providers"
+	"github.com/sipeed/picoclaw/pkg/session"
 )
 
 // legacyContextManager wraps the existing summarization/compression logic
@@ -21,10 +22,11 @@ type legacyContextManager struct {
 }
 
 func (m *legacyContextManager) Assemble(_ context.Context, req *AssembleRequest) (*AssembleResponse, error) {
+	sessionKey := req.SessionKey
 	// Legacy: read history from session, return as-is.
 	// Budget enforcement happens in BuildMessages caller via
 	// isOverContextBudget + forceCompression.
-	agent := m.al.registry.GetDefaultAgent()
+	agent := m.al.agentForSession(sessionKey)
 	if agent == nil {
 		return &AssembleResponse{}, nil
 	}
@@ -77,7 +79,7 @@ func (m *legacyContextManager) Clear(_ context.Context, sessionKey string) error
 // maybeSummarize triggers summarization if the session history exceeds thresholds.
 // It runs asynchronously in a goroutine.
 func (m *legacyContextManager) maybeSummarize(sessionKey string) {
-	agent := m.al.registry.GetDefaultAgent()
+	agent := m.al.agentForSession(sessionKey)
 	if agent == nil {
 		return
 	}
@@ -99,6 +101,13 @@ func (m *legacyContextManager) maybeSummarize(sessionKey string) {
 						})
 					}
 				}()
+				if session.IsSharedSessionKey(sessionKey) {
+					release, err := m.al.sharedTurns.Acquire(context.Background(), sessionKey)
+					if err != nil {
+						return
+					}
+					defer release()
+				}
 				logger.Debug("Memory threshold reached. Optimizing conversation history...")
 				m.summarizeSession(agent, sessionKey)
 			}()
@@ -115,7 +124,7 @@ type compressionResult struct {
 // It drops the oldest ~50% of Turns (a Turn is a complete user→LLM→response
 // cycle, as defined in #1316), so tool-call sequences are never split.
 func (m *legacyContextManager) forceCompression(sessionKey string) (compressionResult, bool) {
-	agent := m.al.registry.GetDefaultAgent()
+	agent := m.al.agentForSession(sessionKey)
 	if agent == nil {
 		return compressionResult{}, false
 	}

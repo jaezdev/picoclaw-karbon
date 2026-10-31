@@ -85,6 +85,7 @@ type channelWorker struct {
 }
 
 type Manager struct {
+	inboundHandler            InboundHandler
 	channels                  map[string]Channel
 	workers                   map[string]*channelWorker
 	bus                       *bus.MessageBus
@@ -115,6 +116,21 @@ type ManagerOption func(*Manager)
 func WithRuntimeEvents(eventBus runtimeevents.Bus) ManagerOption {
 	return func(m *Manager) {
 		m.runtimeEvents = eventBus
+	}
+}
+
+func WithInboundHandler(handler InboundHandler) ManagerOption {
+	return func(m *Manager) { m.inboundHandler = handler }
+}
+
+func (m *Manager) SetInboundHandler(handler InboundHandler) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.inboundHandler = handler
+	for _, ch := range m.channels {
+		if setter, ok := ch.(interface{ SetInboundHandler(handler InboundHandler) }); ok {
+			setter.SetInboundHandler(handler)
+		}
 	}
 }
 
@@ -994,6 +1010,9 @@ func (m *Manager) initChannel(typeName, channelName string) {
 		})
 	} else {
 		// Inject MediaStore if channel supports it
+		if setter, ok := ch.(interface{ SetInboundHandler(handler InboundHandler) }); ok {
+			setter.SetInboundHandler(m.inboundHandler)
+		}
 		if m.mediaStore != nil {
 			if setter, ok := ch.(mediaStoreSetter); ok {
 				setter.SetMediaStore(m.mediaStore)

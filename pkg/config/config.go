@@ -258,7 +258,8 @@ func (c *Config) MarshalJSON() ([]byte, error) {
 		Alias: (*Alias)(c),
 	}
 
-	if len(c.Session.Dimensions) > 0 || len(c.Session.IdentityLinks) > 0 || c.Session.DmScope != "" {
+	if len(c.Session.Dimensions) > 0 || len(c.Session.IdentityLinks) > 0 || c.Session.DmScope != "" ||
+		len(c.Session.SharedGroups) > 0 {
 		sessionCfg := c.Session
 		aux.Session = &sessionCfg
 	}
@@ -348,9 +349,10 @@ type DispatchSelector struct {
 }
 
 type SessionConfig struct {
-	Dimensions    []string            `json:"dimensions,omitempty"`
-	IdentityLinks map[string][]string `json:"identity_links,omitempty"`
-	DmScope       string              `json:"dm_scope,omitempty"`
+	SharedGroups  []SharedSessionGroup `json:"shared_groups,omitempty"`
+	Dimensions    []string             `json:"dimensions,omitempty"`
+	IdentityLinks map[string][]string  `json:"identity_links,omitempty"`
+	DmScope       string               `json:"dm_scope,omitempty"`
 }
 
 // ApplyDmScope translates the user-facing dm_scope value into the internal
@@ -1084,6 +1086,17 @@ type MediaCleanupConfig struct {
 	Interval   int `                                    json:"interval_minutes" env:"PICOCLAW_MEDIA_CLEANUP_INTERVAL"`
 }
 
+// PaperlessConfig controls native attachment archival and the save/status tools.
+// The API credential is read from TokenFile, never included in the model prompt.
+type PaperlessConfig struct {
+	Enabled     bool   `json:"enabled"`
+	AutoArchive bool   `json:"auto_archive"`
+	BaseURL     string `json:"base_url"`
+	PublicURL   string `json:"public_url"`
+	TokenFile   string `json:"token_file"`
+	QueueDir    string `json:"queue_dir"`
+}
+
 type ReadFileToolConfig struct {
 	Enabled         bool   `json:"enabled"`
 	Mode            string `json:"mode"`
@@ -1122,6 +1135,7 @@ type ToolsConfig struct {
 	Exec            ExecConfig         `json:"exec"              yaml:"-"`
 	Skills          SkillsToolsConfig  `json:"skills"            yaml:"skills,omitempty"`
 	MediaCleanup    MediaCleanupConfig `json:"media_cleanup"     yaml:"-"`
+	Paperless       PaperlessConfig    `json:"paperless"         yaml:"-"`
 	MCP             MCPConfig          `json:"mcp"               yaml:"-"`
 	AppendFile      ToolConfig         `json:"append_file"       yaml:"-"                                                       envPrefix:"PICOCLAW_TOOLS_APPEND_FILE_"`
 	EditFile        ToolConfig         `json:"edit_file"         yaml:"-"                                                       envPrefix:"PICOCLAW_TOOLS_EDIT_FILE_"`
@@ -1545,6 +1559,9 @@ func LoadConfig(path string) (*Config, error) {
 		cfg.Agents.Defaults.Workspace = filepath.Join(homePath, pkg.WorkspaceName)
 	}
 
+	if err := cfg.Session.ValidateSharedGroups(); err != nil {
+		return nil, err
+	}
 	cfg.Session.ApplyDmScope()
 	cfg.Session.DeriveDmScope()
 
@@ -1670,6 +1687,9 @@ func toNameIndex(list []*ModelConfig) []string {
 }
 
 func SaveConfig(path string, cfg *Config) error {
+	if err := cfg.Session.ValidateSharedGroups(); err != nil {
+		return err
+	}
 	if cfg.Version < CurrentVersion {
 		cfg.Version = CurrentVersion
 	}

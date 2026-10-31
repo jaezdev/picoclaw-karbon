@@ -2,11 +2,54 @@ package channels
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"testing"
 
 	"github.com/sipeed/picoclaw/pkg/bus"
 	"github.com/sipeed/picoclaw/pkg/config"
 )
+
+func TestInboundArchivalRunsOnlyAfterAuthorizationAndDoesNotDropChat(t *testing.T) {
+	b := bus.NewMessageBus()
+	c := NewBaseChannel("telegram", nil, b, []string{"allowed"})
+	calls := 0
+	c.SetInboundHandler(func(_ context.Context, msg bus.InboundMessage) error {
+		calls++
+		if msg.Context.SenderID != "allowed" {
+			t.Error("unauthorized archival")
+		}
+		return errors.New("disk full")
+	})
+	c.HandleInboundContext(
+		context.Background(),
+		"chat",
+		"hello",
+		[]string{"file"},
+		bus.InboundContext{SenderID: "denied", MessageID: "1"},
+	)
+	if calls != 0 {
+		t.Fatal("rejected sender reached archival")
+	}
+	c.HandleInboundContext(
+		context.Background(),
+		"chat",
+		"hello",
+		[]string{"file"},
+		bus.InboundContext{SenderID: "allowed", MessageID: "2"},
+	)
+	if calls != 1 {
+		t.Fatal("authorized attachment not captured")
+	}
+	select {
+	case msg := <-b.InboundChan():
+		if !strings.Contains(msg.Content, "could not be queued") || !strings.Contains(msg.Content, "hello") {
+			t.Fatal("staging failure lost original conversation or was hidden")
+		}
+	default:
+		t.Fatal("archival failure dropped conversation")
+	}
+}
 
 func TestBaseChannelIsAllowed(t *testing.T) {
 	tests := []struct {

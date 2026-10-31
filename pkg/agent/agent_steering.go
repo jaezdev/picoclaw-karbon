@@ -7,6 +7,7 @@ import (
 
 	"github.com/sipeed/picoclaw/pkg/bus"
 	"github.com/sipeed/picoclaw/pkg/logger"
+	"github.com/sipeed/picoclaw/pkg/session"
 )
 
 func (al *AgentLoop) processMessageSync(ctx context.Context, msg bus.InboundMessage) {
@@ -14,6 +15,18 @@ func (al *AgentLoop) processMessageSync(ctx context.Context, msg bus.InboundMess
 		defer al.channelManager.InvokeTypingStop(msg.Channel, msg.ChatID)
 	}
 
+	// Hold the shared gate through publication (message-tool suppression is turn state).
+	if target, err := al.buildContinuationTarget(msg); err == nil && target != nil {
+		msg.SessionKey = target.SessionKey
+		if session.IsSharedSessionKey(target.SessionKey) {
+			release, err := al.sharedTurns.Acquire(ctx, target.SessionKey)
+			if err != nil {
+				return
+			}
+			defer release()
+			ctx = context.WithValue(ctx, sharedTurnContextKey{}, target.SessionKey)
+		}
+	}
 	response, err := al.processMessage(ctx, msg)
 	al.publishResponseOrError(ctx, msg.Channel, msg.ChatID, msg.SessionKey, response, err)
 }
